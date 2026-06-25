@@ -339,7 +339,8 @@
   function buildData(main, knockout) {
     const groups = parseGroups(main.doc);
     const thirdRanking = parseThirdRanking(main.doc, groups);
-    annotateThirdSafety(thirdRanking, groups);
+    const qualifiedSlots = parseQualifiedSlots(main.doc);
+    annotateThirdSafety(thirdRanking, groups, qualifiedSlots);
     const thirdByGroup = Object.fromEntries(
       thirdRanking.map((entry) => [entry.group, entry]),
     );
@@ -360,6 +361,7 @@
         knockoutRevision: knockout.revid,
       },
       groups,
+      qualifiedSlots,
       completeGroups,
       allGroupsComplete: completeGroups.length === 12,
       thirdRanking,
@@ -518,6 +520,46 @@
     );
   }
 
+  function parseQualifiedSlots(doc) {
+    const table = Array.from(doc.querySelectorAll("table")).find((candidate) => {
+      const headers = Array.from(candidate.querySelectorAll("tr:first-child th")).map(
+        cleanText,
+      );
+      return (
+        headers.includes("Group") &&
+        headers.includes("Winners") &&
+        headers.includes("Runners-up") &&
+        headers.some((header) => header.includes("Third-placed teams"))
+      );
+    });
+
+    const slots = Object.fromEntries(
+      GROUPS.map((group) => [
+        group,
+        {
+          1: null,
+          2: null,
+          3: null,
+        },
+      ]),
+    );
+    if (!table) return slots;
+
+    Array.from(table.rows)
+      .slice(1)
+      .forEach((row) => {
+        const cells = Array.from(row.cells);
+        if (cells.length < 4) return;
+        const group = cleanText(cells[0]).match(/[A-L]/)?.[0];
+        if (!group || !slots[group]) return;
+        slots[group][1] = extractTeam(cells[1]);
+        slots[group][2] = extractTeam(cells[2]);
+        slots[group][3] = extractTeam(cells[3]);
+      });
+
+    return slots;
+  }
+
   function fallbackThirdRanking(groups) {
     return GROUPS.map((group) => groups[group]?.teams?.find((team) => team.position === 3))
       .filter(Boolean)
@@ -546,9 +588,12 @@
       }));
   }
 
-  function annotateThirdSafety(thirdRanking, groups) {
+  function annotateThirdSafety(thirdRanking, groups, qualifiedSlots) {
     thirdRanking.forEach((entry) => {
-      entry.lockedTop8 = isThirdLockedTop8(entry, thirdRanking, groups);
+      const officialThird = qualifiedSlots[entry.group]?.[3];
+      entry.lockedTop8 =
+        sameTeamName(officialThird?.name, entry.team?.name) ||
+        isThirdLockedTop8(entry, thirdRanking, groups);
     });
   }
 
@@ -858,13 +903,17 @@
       const group = data.groups[slot.group];
       const row = group?.teams?.find((team) => team.position === slot.position);
       const label = `${slot.position}${slot.group}`;
+      const official = data.qualifiedSlots?.[slot.group]?.[slot.position];
+      const locked = group?.complete || sameTeamName(official?.name, row?.team?.name);
       return {
         name: row?.team?.name || `${slot.group}组第${slot.position}`,
         nameZh: row?.team?.nameZh || "",
         flag: row?.team?.flag || "",
         source: label,
         slot: label,
-        provisional: !group?.complete,
+        provisional: !locked,
+        statusLabel: locked ? label : "当前",
+        statusClass: locked ? "locked" : "warn",
       };
     }
 
@@ -872,13 +921,16 @@
       const mappedGroup = data.matrixRow?.slots?.[slot.slot];
       if (mappedGroup) {
         const entry = data.thirdByGroup[mappedGroup] || thirdFromGroup(data, mappedGroup);
+        const locked = data.allGroupsComplete || Boolean(entry?.lockedTop8);
         return {
           name: entry?.team?.name || `${mappedGroup}组第3`,
           nameZh: entry?.team?.nameZh || "",
           flag: entry?.team?.flag || "",
           source: `${mappedGroup}组第3`,
           slot: `3${mappedGroup}`,
-          provisional: !data.allGroupsComplete,
+          provisional: !locked,
+          statusLabel: locked ? `3${mappedGroup}` : "当前",
+          statusClass: locked ? "locked" : "warn",
         };
       }
       return {
@@ -887,6 +939,8 @@
         source: "待组合确定",
         slot: slot.slot,
         provisional: true,
+        statusLabel: "待定",
+        statusClass: "warn",
       };
     }
 
@@ -898,10 +952,20 @@
         source: `M${slot.match}`,
         slot: `${slot.result === "winner" ? "W" : "L"}${slot.match}`,
         provisional: true,
+        statusLabel: "待定",
+        statusClass: "warn",
       };
     }
 
-    return { name: "待定", flag: "", source: "", slot: "", provisional: true };
+    return {
+      name: "待定",
+      flag: "",
+      source: "",
+      slot: "",
+      provisional: true,
+      statusLabel: "待定",
+      statusClass: "warn",
+    };
   }
 
   function thirdFromGroup(data, group) {
@@ -922,6 +986,10 @@
     return /^(胜者|负者|第3名|待定|[A-L]组第|Winner|Runner-up|Loser|3rd)/i.test(
       name || "",
     );
+  }
+
+  function sameTeamName(a, b) {
+    return Boolean(a && b && cleanTeamName(a) === cleanTeamName(b));
   }
 
   function renderMatchCard(match, data) {
@@ -978,8 +1046,10 @@
   }
 
   function renderTeamRow(team, data) {
-    const tagClass = team.provisional ? "slot warn" : "slot qualify";
-    const tagText = team.provisional && !data.allGroupsComplete ? "当前" : esc(team.slot || team.source);
+    const tagClass = `slot ${team.statusClass || (team.provisional ? "warn" : "locked")}`;
+    const tagText =
+      team.statusLabel ||
+      (team.provisional && !data.allGroupsComplete ? "当前" : team.slot || team.source);
     const primary = displayTeamName(team);
     const secondary = team.nameZh
       ? [team.name, team.source].filter(Boolean).join(" · ")
@@ -1112,6 +1182,7 @@
           <strong title="${attr(team.name || name)}">${esc(name)}</strong>
           <span>${esc(sub || "")}</span>
         </div>
+        <em class="slot ${team.statusClass || (team.provisional ? "warn" : "locked")}">${esc(team.statusLabel || (team.provisional ? "当前" : team.slot || ""))}</em>
       </div>
     `;
   }
