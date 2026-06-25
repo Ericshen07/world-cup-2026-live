@@ -133,9 +133,43 @@
     91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104,
   ];
 
+  const BRACKET_LAYOUT = [
+    { match: 73, col: 1, row: 1, span: 1 },
+    { match: 75, col: 1, row: 2, span: 1 },
+    { match: 74, col: 1, row: 3, span: 1 },
+    { match: 77, col: 1, row: 4, span: 1 },
+    { match: 83, col: 1, row: 5, span: 1 },
+    { match: 84, col: 1, row: 6, span: 1 },
+    { match: 81, col: 1, row: 7, span: 1 },
+    { match: 82, col: 1, row: 8, span: 1 },
+    { match: 76, col: 1, row: 9, span: 1 },
+    { match: 78, col: 1, row: 10, span: 1 },
+    { match: 79, col: 1, row: 11, span: 1 },
+    { match: 80, col: 1, row: 12, span: 1 },
+    { match: 86, col: 1, row: 13, span: 1 },
+    { match: 88, col: 1, row: 14, span: 1 },
+    { match: 85, col: 1, row: 15, span: 1 },
+    { match: 87, col: 1, row: 16, span: 1 },
+    { match: 90, col: 2, row: 1, span: 2 },
+    { match: 89, col: 2, row: 3, span: 2 },
+    { match: 93, col: 2, row: 5, span: 2 },
+    { match: 94, col: 2, row: 7, span: 2 },
+    { match: 91, col: 2, row: 9, span: 2 },
+    { match: 92, col: 2, row: 11, span: 2 },
+    { match: 95, col: 2, row: 13, span: 2 },
+    { match: 96, col: 2, row: 15, span: 2 },
+    { match: 97, col: 3, row: 1, span: 4 },
+    { match: 98, col: 3, row: 5, span: 4 },
+    { match: 99, col: 3, row: 9, span: 4 },
+    { match: 100, col: 3, row: 13, span: 4 },
+    { match: 101, col: 4, row: 1, span: 8 },
+    { match: 102, col: 4, row: 9, span: 8 },
+    { match: 104, col: 5, row: 1, span: 16 },
+  ];
+
   const state = {
     timer: null,
-    refreshMs: 120000,
+    refreshMs: 3600000,
     data: null,
   };
 
@@ -179,6 +213,7 @@
     el.qrBtn.addEventListener("click", () => toggleSharePanel(true));
     el.copyShareBtn.addEventListener("click", copyShareLink);
     el.closeShareBtn.addEventListener("click", () => toggleSharePanel(false));
+    window.addEventListener("resize", () => requestAnimationFrame(drawBracketLines));
 
     renderSkeleton();
     hydrateSharePanel();
@@ -304,6 +339,7 @@
   function buildData(main, knockout) {
     const groups = parseGroups(main.doc);
     const thirdRanking = parseThirdRanking(main.doc, groups);
+    annotateThirdSafety(thirdRanking, groups);
     const thirdByGroup = Object.fromEntries(
       thirdRanking.map((entry) => [entry.group, entry]),
     );
@@ -338,13 +374,28 @@
 
   function parseGroups(doc) {
     const tables = Array.from(doc.querySelectorAll("table"));
-    const standings = tables.filter(isGroupStandingTable);
+    const standings = [];
+    for (let i = 0; i < tables.length && standings.length < 12; i += 1) {
+      if (!isGroupStandingTable(tables[i])) continue;
+      const fixtures = [];
+      for (let j = i + 1; j < tables.length && fixtures.length < 6; j += 1) {
+        if (isGroupStandingTable(tables[j]) || isThirdTable(tables[j])) break;
+        if (tables[j].classList.contains("fevent")) {
+          fixtures.push(parseGroupFixture(tables[j]));
+        }
+      }
+      standings.push({ table: tables[i], fixtures });
+    }
+
     if (standings.length < 12) {
       throw new Error(`只找到 ${standings.length} 个小组积分表，页面结构可能变化`);
     }
 
     return Object.fromEntries(
-      GROUPS.map((group, index) => [group, parseGroupTable(standings[index], group)]),
+      GROUPS.map((group, index) => [
+        group,
+        parseGroupTable(standings[index].table, group, standings[index].fixtures),
+      ]),
     );
   }
 
@@ -362,7 +413,7 @@
     );
   }
 
-  function parseGroupTable(table, group) {
+  function parseGroupTable(table, group, fixtures = []) {
     const teams = Array.from(table.rows)
       .slice(1)
       .map((row) => {
@@ -393,8 +444,24 @@
     return {
       group,
       teams,
+      fixtures,
       complete: teams.length === 4 && teams.every((team) => team.pld >= 3),
       started: teams.some((team) => team.pld > 0),
+    };
+  }
+
+  function parseGroupFixture(table) {
+    const scoreText = cleanText(table.querySelector(".fscore"));
+    const scoreMatch = scoreText
+      .replace(/\u2212/g, "-")
+      .match(/(\d+)\s*[–-]\s*(\d+)/);
+    return {
+      home: cleanTeamName(extractTeam(table.querySelector(".fhome")).name),
+      away: cleanTeamName(extractTeam(table.querySelector(".faway")).name),
+      scoreText,
+      played: Boolean(scoreMatch),
+      homeGoals: scoreMatch ? Number(scoreMatch[1]) : null,
+      awayGoals: scoreMatch ? Number(scoreMatch[2]) : null,
     };
   }
 
@@ -477,6 +544,87 @@
         pts: team.pts,
         qualification: "",
       }));
+  }
+
+  function annotateThirdSafety(thirdRanking, groups) {
+    thirdRanking.forEach((entry) => {
+      entry.lockedTop8 = isThirdLockedTop8(entry, thirdRanking, groups);
+    });
+  }
+
+  function isThirdLockedTop8(entry, thirdRanking, groups) {
+    const ownGroup = groups[entry.group];
+    if (!ownGroup?.complete || entry.rank > 8) return false;
+
+    let guaranteedBelow = 0;
+    for (const groupLetter of GROUPS) {
+      if (groupLetter === entry.group) continue;
+      const group = groups[groupLetter];
+      if (!group) continue;
+
+      if (group.complete) {
+        const other = thirdRanking.find((item) => item.group === groupLetter);
+        if (other && compareThirdStats(entry, other) > 0) {
+          guaranteedBelow += 1;
+        }
+      } else if (maxPossibleThirdPoints(group) < entry.pts) {
+        guaranteedBelow += 1;
+      }
+    }
+
+    return guaranteedBelow >= 4;
+  }
+
+  function compareThirdStats(a, b) {
+    return (
+      a.pts - b.pts ||
+      a.gd - b.gd ||
+      a.gf - b.gf
+    );
+  }
+
+  function maxPossibleThirdPoints(group) {
+    const remaining = group.fixtures.filter((fixture) => !fixture.played);
+    if (!remaining.length) {
+      const third = group.teams.find((team) => team.position === 3);
+      return third?.pts || 0;
+    }
+
+    let maxThird = 0;
+    const initialPoints = new Map(
+      group.teams.map((team) => [team.team.name, team.pts]),
+    );
+
+    function enumerate(index, points) {
+      if (index >= remaining.length) {
+        const ordered = Array.from(points.values()).sort((a, b) => b - a);
+        maxThird = Math.max(maxThird, ordered[2] || 0);
+        return;
+      }
+
+      const fixture = remaining[index];
+      const home = fixture.home;
+      const away = fixture.away;
+      if (!points.has(home) || !points.has(away)) {
+        enumerate(index + 1, points);
+        return;
+      }
+
+      const outcomes = [
+        [home, 3, away, 0],
+        [home, 1, away, 1],
+        [home, 0, away, 3],
+      ];
+      for (const [teamA, ptsA, teamB, ptsB] of outcomes) {
+        const next = new Map(points);
+        next.set(teamA, next.get(teamA) + ptsA);
+        next.set(teamB, next.get(teamB) + ptsB);
+        enumerate(index + 1, next);
+      }
+    }
+
+    enumerate(0, initialPoints);
+    return maxThird;
   }
 
   function parseThirdMatrix(doc) {
@@ -668,6 +816,7 @@
     ).join("");
     el.thirdRanking.innerHTML = renderThirdRanking(data);
     el.bracket.innerHTML = renderBracket(data);
+    requestAnimationFrame(drawBracketLines);
     el.groups.innerHTML = renderGroups(data);
   }
 
@@ -851,15 +1000,20 @@
     const rows = data.thirdRanking
       .map((entry) => {
         const qualified = entry.rank <= 8;
+        const locked = entry.lockedTop8;
         const status = data.allGroupsComplete
           ? qualified
             ? "晋级"
             : "淘汰"
+          : locked
+            ? "已锁定"
           : qualified
             ? "晋级区"
             : "淘汰区";
+        const rowClass = locked ? "rank-locked" : qualified ? "rank-in" : "rank-risk";
+        const badgeClass = locked ? "locked" : qualified ? "qualify" : "out";
         return `
-          <tr class="${qualified ? "rank-in" : "rank-risk"}">
+          <tr class="${rowClass}">
             <td class="num">${entry.rank}</td>
             <td>${esc(entry.group)}</td>
             <td>${teamCell(entry.team)}</td>
@@ -867,7 +1021,7 @@
             <td class="num">${entry.pts}</td>
             <td class="num">${esc(entry.gdText)}</td>
             <td class="num">${entry.gf}</td>
-            <td><span class="badge ${qualified ? "qualify" : "out"}">${status}</span></td>
+            <td><span class="badge ${badgeClass}">${status}</span></td>
           </tr>
         `;
       })
@@ -893,20 +1047,112 @@
   }
 
   function renderBracket(data) {
-    return ROUNDS.map((round, index) => {
-      const matches = round.matches
-        .map((match) => renderPathMatchCard(match, round, data))
-        .join("");
-      return `
-        <div class="round-column" data-round="${index}">
-          <div class="round-title">
-            <span>${esc(round.name)}</span>
-            <small>${round.matches.length} 场</small>
-          </div>
-          ${matches}
+    const nodes = BRACKET_LAYOUT.map((layout) => renderBracketNode(layout, data)).join("");
+    const thirdPlace = renderBracketSideMatch(103, data);
+    return `
+      <div class="bracket-map" aria-label="淘汰赛树状路径图">
+        <svg class="bracket-lines" aria-hidden="true"></svg>
+        <div class="bracket-stage stage-1">32 强</div>
+        <div class="bracket-stage stage-2">16 强</div>
+        <div class="bracket-stage stage-3">8 强</div>
+        <div class="bracket-stage stage-4">半决赛</div>
+        <div class="bracket-stage stage-5">决赛</div>
+        ${nodes}
+      </div>
+      <div class="bracket-side">${thirdPlace}</div>
+    `;
+  }
+
+  function renderBracketNode(layout, data) {
+    const meta = getMatchMeta(layout.match);
+    if (!meta) return "";
+    const match = resolveMatch(meta.match, meta.round.name, data);
+    const target = nextMatchFor(match.match, "winner");
+    const style = `grid-column:${layout.col};grid-row:${layout.row + 1} / span ${layout.span}`;
+    return `
+      <article class="bracket-node ${match.match === 104 ? "final-node" : ""}" data-match="${match.match}" style="${style}">
+        <div class="bracket-node-head">
+          <strong>M${match.match}</strong>
+          <span>${esc(meta.round.name)}</span>
         </div>
-      `;
-    }).join("");
+        <div class="bracket-teams">
+          ${renderBracketTeam(match.home)}
+          ${renderBracketTeam(match.away)}
+        </div>
+        <div class="bracket-node-foot">
+          ${match.match === 104 ? "冠军诞生" : target ? `胜者 → M${target}` : ""}
+        </div>
+      </article>
+    `;
+  }
+
+  function renderBracketSideMatch(matchNo, data) {
+    const meta = getMatchMeta(matchNo);
+    if (!meta) return "";
+    const match = resolveMatch(meta.match, meta.round.name, data);
+    return `
+      <article class="match-card third-place-card">
+        <div class="match-head">
+          <span class="match-number">M${match.match}</span>
+          <span>季军赛</span>
+        </div>
+        ${renderTeamRow(match.home, data)}
+        ${renderTeamRow(match.away, data)}
+      </article>
+    `;
+  }
+
+  function renderBracketTeam(team) {
+    const name = displayTeamName(team);
+    const sub = team.nameZh ? team.name : team.source;
+    return `
+      <div class="bracket-team">
+        ${flagHtml(team.flag, name)}
+        <div>
+          <strong title="${attr(team.name || name)}">${esc(name)}</strong>
+          <span>${esc(sub || "")}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function getMatchMeta(matchNo) {
+    for (const round of ROUNDS) {
+      const match = round.matches.find((item) => item.match === matchNo);
+      if (match) return { round, match };
+    }
+    return null;
+  }
+
+  function drawBracketLines() {
+    const map = el.bracket?.querySelector(".bracket-map");
+    const svg = el.bracket?.querySelector(".bracket-lines");
+    if (!map || !svg) return;
+    const mapRect = map.getBoundingClientRect();
+    const paths = [];
+
+    BRACKET_LAYOUT.forEach((layout) => {
+      const target = nextMatchFor(layout.match, "winner");
+      if (!target) return;
+      const from = map.querySelector(`[data-match="${layout.match}"]`);
+      const to = map.querySelector(`[data-match="${target}"]`);
+      if (!from || !to) return;
+      const fromRect = from.getBoundingClientRect();
+      const toRect = to.getBoundingClientRect();
+      const x1 = fromRect.right - mapRect.left;
+      const y1 = fromRect.top + fromRect.height / 2 - mapRect.top;
+      const x2 = toRect.left - mapRect.left;
+      const y2 = toRect.top + toRect.height / 2 - mapRect.top;
+      const mid = x1 + Math.max(28, (x2 - x1) / 2);
+      paths.push(`M ${x1} ${y1} L ${mid} ${y1} L ${mid} ${y2} L ${x2} ${y2}`);
+    });
+
+    svg.setAttribute("viewBox", `0 0 ${map.scrollWidth} ${map.scrollHeight}`);
+    svg.style.width = `${map.scrollWidth}px`;
+    svg.style.height = `${map.scrollHeight}px`;
+    svg.innerHTML = paths
+      .map((d) => `<path d="${d}" vector-effect="non-scaling-stroke"></path>`)
+      .join("");
   }
 
   function renderGroups(data) {

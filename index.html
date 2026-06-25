@@ -28,9 +28,9 @@
           <span>自动刷新</span>
         </label>
         <select id="refreshInterval" aria-label="自动刷新间隔">
-          <option value="60000">1 分钟</option>
-          <option value="120000" selected>2 分钟</option>
-          <option value="300000">5 分钟</option>
+          <option value="900000">15 分钟</option>
+          <option value="1800000">30 分钟</option>
+          <option value="3600000" selected>1 小时</option>
         </select>
         <button id="copyLinkBtn" type="button">复制链接</button>
         <button id="qrBtn" type="button">二维码</button>
@@ -90,7 +90,10 @@
               <p class="eyebrow">Best Third-placed Teams</p>
               <h2>小组第三排名</h2>
             </div>
-            <span class="badge qualify">前 8 晋级</span>
+            <div class="badge-row">
+              <span class="badge locked">蓝色=已锁定</span>
+              <span class="badge qualify">前 8 晋级</span>
+            </div>
           </div>
           <div id="thirdRanking" class="table-wrap" aria-live="polite"></div>
         </aside>
@@ -102,6 +105,7 @@
             <p class="eyebrow">Knockout Path</p>
             <h2>淘汰赛路径图</h2>
           </div>
+          <span class="badge warn">手机端可左右滑动</span>
         </div>
         <div id="bracket" class="bracket-grid" aria-live="polite"></div>
       </section>
