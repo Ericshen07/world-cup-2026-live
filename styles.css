@@ -106,6 +106,52 @@ h3 {
   min-width: 0;
 }
 
+.share-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.share-panel[hidden] {
+  display: none;
+}
+
+.share-panel h2 {
+  margin-bottom: 10px;
+}
+
+.share-panel input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fafc;
+  color: var(--ink);
+}
+
+.share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.share-panel img {
+  width: 164px;
+  height: 164px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
 button,
 select,
 .switch {
@@ -388,6 +434,19 @@ tr:last-child td {
   min-width: 160px;
 }
 
+.team-cell-label {
+  display: inline-flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.team-cell-label small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .num {
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -395,16 +454,33 @@ tr:last-child td {
 
 .bracket-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(220px, 1fr));
-  gap: 12px;
+  grid-template-columns:
+    minmax(250px, 1.15fr) minmax(250px, 1fr) minmax(250px, 1fr)
+    minmax(250px, 0.9fr) minmax(250px, 0.85fr) minmax(250px, 0.85fr);
+  gap: 16px;
   align-items: start;
+  overflow-x: auto;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(36, 87, 197, 0.06), transparent 34%),
+    var(--panel);
+  box-shadow: var(--shadow);
 }
 
 .round-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   min-width: 0;
 }
 
 .round-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   min-height: 34px;
   margin-bottom: 8px;
   color: var(--muted);
@@ -413,10 +489,51 @@ tr:last-child td {
   text-transform: uppercase;
 }
 
+.round-title small {
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .round-column .match-card {
-  min-height: 132px;
-  margin-bottom: 10px;
+  min-height: 154px;
+  margin-bottom: 0;
   box-shadow: none;
+}
+
+.path-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.path-card.has-next::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -17px;
+  width: 17px;
+  border-top: 2px solid rgba(15, 118, 110, 0.45);
+}
+
+.path-card.has-next::before {
+  content: "";
+  position: absolute;
+  top: calc(50% - 4px);
+  right: -18px;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid rgba(15, 118, 110, 0.45);
+  border-right: 2px solid rgba(15, 118, 110, 0.45);
+  transform: rotate(45deg);
+}
+
+.path-footer {
+  margin-top: auto;
+  padding-top: 10px;
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .groups-grid {
@@ -477,7 +594,7 @@ tr:last-child td {
   }
 
   .bracket-grid {
-    grid-template-columns: repeat(3, minmax(220px, 1fr));
+    grid-template-columns: repeat(6, minmax(240px, 1fr));
   }
 
   .groups-grid {
@@ -497,9 +614,30 @@ tr:last-child td {
 
   .status-grid,
   .match-grid,
-  .bracket-grid,
   .groups-grid {
     grid-template-columns: 1fr;
+  }
+
+  .share-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .share-panel img {
+    justify-self: center;
+  }
+
+  .bracket-grid {
+    grid-template-columns: repeat(6, minmax(250px, 1fr));
+    margin-right: -14px;
+    margin-left: -14px;
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+    scroll-snap-type: x proximity;
+  }
+
+  .round-column {
+    scroll-snap-align: start;
   }
 
   .controls {
@@ -526,5 +664,15 @@ tr:last-child td {
   .badge,
   .slot {
     white-space: normal;
+  }
+
+  .team-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .team-row .slot {
+    grid-column: 2;
+    justify-self: start;
+    margin-top: 2px;
   }
 }
