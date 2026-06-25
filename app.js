@@ -5,6 +5,11 @@
   const MAIN_PAGE = "2026_FIFA_World_Cup";
   const KNOCKOUT_PAGE = "2026_FIFA_World_Cup_knockout_stage";
   const PUBLIC_URL = "https://ericshen07.github.io/world-cup-2026-live/";
+  const FETCH_TIMEOUT_MS = 8000;
+  const SNAPSHOT_FILES = {
+    [MAIN_PAGE]: "./data/wiki_main_parse.json",
+    [KNOCKOUT_PAGE]: "./data/wiki_knockout_parse.json",
+  };
   const GROUPS = "ABCDEFGHIJKL".split("");
   const TEAM_ZH = {
     Algeria: "阿尔及利亚",
@@ -290,23 +295,49 @@
     el.loadState.textContent = "更新中";
 
     try {
-      const [main, knockout] = await Promise.all([
-        fetchParsedPage(MAIN_PAGE),
-        fetchParsedPage(KNOCKOUT_PAGE),
-      ]);
+      const forceSnapshot = new URLSearchParams(window.location.search).has("snapshot");
+      const [main, knockout] = forceSnapshot
+        ? await fetchSnapshotPages()
+        : await fetchLivePages();
       const data = buildData(main, knockout);
+      data.sourceMode = forceSnapshot ? "snapshot" : "live";
       state.data = data;
       renderData(data);
-    } catch (error) {
-      console.error(error);
-      el.loadState.textContent = "更新失败";
-      setNotice(`数据更新失败：${error.message}`, true);
+    } catch (liveError) {
+      console.warn("Live data failed, trying bundled snapshot.", liveError);
+      try {
+        setNotice("实时 Wikipedia API 暂不可用，正在读取内置快照...");
+        const [main, knockout] = await fetchSnapshotPages();
+        const data = buildData(main, knockout);
+        data.sourceMode = "snapshot";
+        data.sourceError = liveError.message;
+        state.data = data;
+        renderData(data);
+      } catch (snapshotError) {
+        console.error(snapshotError);
+        el.loadState.textContent = "更新失败";
+        setNotice(`数据更新失败：${snapshotError.message}`, true);
+      }
     } finally {
       el.refreshBtn.disabled = false;
     }
   }
 
-  async function fetchParsedPage(page) {
+  function fetchLivePages() {
+    return Promise.all([
+      fetchParsedPage(MAIN_PAGE),
+      fetchParsedPage(KNOCKOUT_PAGE),
+    ]);
+  }
+
+  function fetchSnapshotPages() {
+    return Promise.all([
+      fetchParsedPage(MAIN_PAGE, SNAPSHOT_FILES[MAIN_PAGE]),
+      fetchParsedPage(KNOCKOUT_PAGE, SNAPSHOT_FILES[KNOCKOUT_PAGE]),
+    ]);
+  }
+
+  async function fetchParsedPage(page, snapshotUrl = "") {
     const params = new URLSearchParams({
       action: "parse",
       page,
@@ -316,8 +347,9 @@
       disableeditsection: "1",
       _: String(Date.now()),
     });
-    const response = await fetch(`${API}?${params.toString()}`, {
-      cache: "no-store",
+    const url = snapshotUrl || `${API}?${params.toString()}`;
+    const response = await fetchWithTimeout(url, page, {
+      cache: snapshotUrl ? "reload" : "no-store",
     });
     if (!response.ok) {
       throw new Error(`${page} HTTP ${response.status}`);
@@ -334,6 +366,24 @@
       sections: json.parse.sections || [],
       doc,
     };
+  }
+
+  async function fetchWithTimeout(url, label, options = {}) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      return await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error.name === "AbortError") {
+        throw new Error(`${label} 请求超过 ${FETCH_TIMEOUT_MS / 1000} 秒`);
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
   }
 
   function buildData(main, knockout) {
@@ -826,7 +876,10 @@
   }
 
   function renderData(data) {
-    el.loadState.textContent = `已更新 ${formatTime(data.fetchedAt)}`;
+    el.loadState.textContent =
+      data.sourceMode === "snapshot"
+        ? `快照 ${formatTime(data.fetchedAt)}`
+        : `已更新 ${formatTime(data.fetchedAt)}`;
     el.revisionState.textContent = `总 ${data.source.mainRevision} / KO ${data.source.knockoutRevision}`;
     el.comboState.textContent = data.comboKey ? data.comboKey.split("").join(" ") : "--";
     el.completeState.textContent = `${data.completeGroups.length}/12`;
@@ -845,7 +898,11 @@
     const usingFallback = data.thirdRanking.some(
       (entry) => entry.source === "computed-basic",
     );
-    if (usingFallback) {
+    if (data.sourceMode === "snapshot") {
+      setNotice(
+        `手机或当前网络访问 Wikipedia API 不稳定，已显示内置快照。实时源错误：${data.sourceError || "手动快照模式"}`,
+      );
+    } else if (usingFallback) {
       setNotice(
         "Wikipedia 第三名专表未解析到，当前使用积分/净胜球/进球数基础排序，需等待源表恢复。",
         true,

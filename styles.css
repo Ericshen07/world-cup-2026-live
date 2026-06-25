@@ -589,7 +589,7 @@ tr:last-child td {
 
 .bracket-team {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   min-width: 0;
