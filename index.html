@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>2026 世界杯 32 强动态对阵表</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">FIFA World Cup 2026</p>
+        <h1>32 强动态对阵表</h1>
+        <p class="subtitle">小组第三实时排名 + 官方第三名分配矩阵</p>
+      </div>
+      <div class="controls" aria-label="数据刷新控制">
+        <button id="refreshBtn" type="button">刷新</button>
+        <label class="switch">
+          <input id="autoRefresh" type="checkbox" checked />
+          <span>自动刷新</span>
+        </label>
+        <select id="refreshInterval" aria-label="自动刷新间隔">
+          <option value="60000">1 分钟</option>
+          <option value="120000" selected>2 分钟</option>
+          <option value="300000">5 分钟</option>
+        </select>
+      </div>
+    </header>
+
+    <main>
+      <section class="status-grid" aria-label="数据状态">
+        <div class="status-item">
+          <span>数据状态</span>
+          <strong id="loadState">加载中</strong>
+        </div>
+        <div class="status-item">
+          <span>源修订</span>
+          <strong id="revisionState">--</strong>
+        </div>
+        <div class="status-item">
+          <span>当前第三名组合</span>
+          <strong id="comboState">--</strong>
+        </div>
+        <div class="status-item">
+          <span>小组完成</span>
+          <strong id="completeState">--</strong>
+        </div>
+      </section>
+
+      <p id="notice" class="notice" role="status"></p>
+
+      <section class="split">
+        <div class="section-block">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Round of 32</p>
+              <h2>32 强对阵</h2>
+            </div>
+            <span id="matrixState" class="badge">矩阵待加载</span>
+          </div>
+          <div id="round32" class="match-grid" aria-live="polite"></div>
+        </div>
+
+        <aside class="section-block">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Best Third-placed Teams</p>
+              <h2>小组第三排名</h2>
+            </div>
+            <span class="badge qualify">前 8 晋级</span>
+          </div>
+          <div id="thirdRanking" class="table-wrap" aria-live="polite"></div>
+        </aside>
+      </section>
+
+      <section class="section-block full">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Knockout Path</p>
+            <h2>32 强以后对阵形式</h2>
+          </div>
+        </div>
+        <div id="bracket" class="bracket-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="section-block full">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Group Tables</p>
+            <h2>小组积分</h2>
+          </div>
+        </div>
+        <div id="groups" class="groups-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="source-strip" aria-label="数据来源">
+        <a href="https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026" target="_blank" rel="noreferrer">FIFA 赛事页</a>
+        <a href="https://digitalhub.fifa.com/m/636f5c9c6f29771f/original/FWC2026_regulations_EN.pdf" target="_blank" rel="noreferrer">FIFA 竞赛规程 PDF</a>
+        <a href="https://en.wikipedia.org/wiki/2026_FIFA_World_Cup" target="_blank" rel="noreferrer">Wikipedia 总页面</a>
+        <a href="https://en.wikipedia.org/wiki/2026_FIFA_World_Cup_knockout_stage" target="_blank" rel="noreferrer">Wikipedia 淘汰赛页</a>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
